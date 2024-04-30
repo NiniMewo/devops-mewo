@@ -1,5 +1,6 @@
 pipeline {
-    agent any
+    agent 
+
     stages {
         stage('Initialize') {
             steps {
