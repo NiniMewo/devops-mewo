@@ -1,57 +1,84 @@
-
 pipeline {
-    agent {
-        docker {
-            image 'python:3.12.1-alpine3.19'
-            args '-v /var/run/docker.sock:/var/run/docker.sock'
-        }
+    agent none
+
+    environment {
+        NODE_ENV = 'production'
+        DOCKER_IMAGE_PYTHON = 'python:3.12.1-alpine3.19'
+        DOCKER_IMAGE_NODE = 'node:16-alpine'
     }
+
     stages {
-        stage('Initialize') {
+        stage('Prepare Environment') {
+            agent any
             steps {
-                script {
-                    echo 'Starting the Pipeline...'
-                    sh 'python --version'
+                checkout scm // Checkout code from Source Control Management
+                echo 'Environment prepared.'
+            }
+        }
+
+        stage('Build and Test Django') {
+            agent {
+                docker {
+                    image "${env.DOCKER_IMAGE_PYTHON}"
+                    args '-v /var/run/docker.sock:/var/run/docker.sock -v ${WORKSPACE}:/app'
+                }
+            }
+            steps {
+                dir('sources/realWorldApp-Conduit-Django') {
+                    script {
+                        sh 'pip install --no-cache-dir -r requirements.txt'
+                        sh 'python manage.py migrate'
+                        echo 'Building the Django code...'
+                        sh 'python manage.py test'
+                        echo 'Running Django unit tests...'
+                    }
                 }
             }
         }
-        stage('Build') {
+
+        stage('Build and Test Vue.js') {
+            agent {
+                docker {
+                    image "${env.DOCKER_IMAGE_NODE}"
+                    args '-v ${WORKSPACE}:/app'
+                }
+            }
             steps {
-                script {
-                    echo 'Building the code...'
+                dir('sources/realWorldApp-Conduit-vue3') {
+                    script {
+                        sh 'npm install --no-cache'
+                        sh 'npm run build'
+                        echo 'Building the Vue.js code...'
+                        sh 'npm run test'
+                        echo 'Running Vue.js unit tests...'
+                    }
                 }
             }
         }
-        stage('Test') {
-            steps {
-                script {
-                    echo 'Running unit tests...'
-                }
-            }
-        }
+
         stage('Deploy') {
+            when {
+                branch 'main' // Only deploy from the main branch
+            }
+            agent any
             steps {
                 script {
                     echo 'Deploying the application to staging environment...'
+                    // Add deployment scripts here
                 }
             }
         }
     }
+
     post {
         success {
-            script {
-                echo 'Pipeline completed successfully!'
-            }
+            echo 'Pipeline completed successfully!'
         }
         failure {
-            script {
-                echo 'Pipeline failed. Check logs for details.'
-            }
+            echo 'Pipeline failed. Check logs for details.'
         }
         always {
-            script {
-                echo 'This post section runs regardless of the pipeline result.'
-            }
+            cleanWs() // Clean up the workspace after the pipeline execution
         }
     }
 }
